@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YC W26 Explorer</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23f26522'/><text x='50' y='68' font-size='52' font-weight='bold' text-anchor='middle' fill='white' font-family='system-ui'>Y</text></svg>">
+    
+    <!-- OG Meta Tags for Sharing -->
+    <meta property="og:title" content="YC W26 Explorer — Interactive batch analysis">
+    <meta property="og:description" content="Explore 1000+ YC Winter 2026 startups with AI-powered gap analysis, compare companies, find whitespace, and discover missing ideas.">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="https://opengraph.githubassets.com/1/ycombinator/yc-explorer">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="YC W26 Explorer — 1000+ startups, one graph">
+    <meta name="twitter:description" content="Interactive force-graph explorer for YC W26 batch with AI gap analysis. Find the missing startup idea.">
+    
+    <!-- CDN Links -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    
+    <!-- Data -->
+    <script src="data/companies.js"></script>
+    <script src="data/similarity_data.js"></script>
+</head>
+<body>
+
+    <!-- Loading -->
+    <div id="loading" class="fixed inset-0 bg-[#0a0a0f] z-50 flex items-center justify-center">
+        <div class="text-center">
+            <div class="w-12 h-12 border-[3px] border-blue-500/20 border-t-blue-500 rounded-full animate-spin mb-4 mx-auto"></div>
+            <p class="text-slate-500 text-sm">Building graph...</p>
+        </div>
+    </div>
+
+    <!-- Main Layout -->
+    <div class="fixed inset-0 flex pointer-events-none z-40">
+        
+        <!-- ═══ LEFT SIDEBAR ═══ -->
+        <div id="left-sidebar" class="sidebar h-full flex flex-col pointer-events-auto glass border-r border-white/5">
+            
+            <!-- Header -->
+            <div class="p-4 border-b border-white/5 flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center flex-shrink-0">
+                    <i class="fa-brands fa-y-combinator text-white"></i>
+                </div>
+                <div class="min-w-0 flex-1 sidebar-content">
+                    <h1 class="text-base font-bold tracking-tight leading-tight">W26 Explorer</h1>
+                    <p class="text-[9px] text-slate-500 uppercase tracking-[0.15em] font-semibold">Winter 2026 &middot; <span id="total-count">0</span> companies</p>
+                </div>
+                <button id="sidebar-collapse-btn" class="sidebar-collapse-btn pointer-events-auto" title="Collapse sidebar">
+                    <i class="fa-solid fa-angles-left text-[10px]"></i>
+                </button>
+            </div>
+
+            <!-- Search -->
+            <div class="p-3 border-b border-white/5">
+                <div class="relative">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 text-xs"></i>
+                    <input type="text" id="search-input" placeholder="Search name, tag, description..." 
+                           class="w-full bg-slate-900/50 border border-slate-800 rounded-lg py-2 pl-9 pr-3 text-xs focus:ring-1 focus:ring-blue-500/40 outline-none placeholder:text-slate-600">
+                </div>
+            </div>
+
+            <!-- Filter Toggles -->
+            <div class="px-3 py-2 border-b border-white/5 flex gap-1.5">
+                <button id="filter-starred" class="filter-btn flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md border border-slate-800 text-xs text-slate-400">
+                    <i class="fa-solid fa-star text-[10px]"></i><span>Starred</span> <span id="starred-count" class="text-[10px] text-slate-600">0</span>
+                </button>
+                <button id="filter-unvisited" class="filter-btn flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md border border-slate-800 text-xs text-slate-400">
+                    <i class="fa-solid fa-eye-slash text-[10px]"></i><span>Unvisited</span> <span id="unvisited-count" class="text-[10px] text-slate-600">0</span>
+                </button>
+                <button id="filter-hiring" class="filter-btn flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md border border-slate-800 text-xs text-slate-400">
+                    <i class="fa-solid fa-briefcase text-[10px]"></i><span>Hiring</span>
+                </button>
+                <button id="filter-notes" class="filter-btn flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md border border-slate-800 text-xs text-slate-400" title="Has notes">
+                    <i class="fa-solid fa-note-sticky text-[10px]"></i><span id="notes-count" class="text-[10px] text-slate-600">0</span>
+                </button>
+            </div>
+
+            <!-- Filter result count -->
+            <div id="filter-count-bar" class="px-3 py-1.5 border-b border-white/5 hidden">
+                <p class="text-[10px] text-slate-400"><span class="text-white font-semibold" id="filtered-count">0</span> of <span id="filtered-total">0</span> companies <button id="clear-filters-btn" class="text-blue-400 hover:text-blue-300 ml-1">clear</button></p>
+            </div>
+
+            <!-- View mode tabs -->
+            <div class="px-3 pt-2 flex gap-1">
+                <button id="tab-tree" class="flex-1 text-[10px] font-semibold uppercase tracking-wider py-1.5 rounded-md text-blue-400 bg-blue-500/10">Tree</button>
+                <button id="tab-list" class="flex-1 text-[10px] font-semibold uppercase tracking-wider py-1.5 rounded-md text-slate-500 hover:text-slate-300">List</button>
+                <button id="tab-insights" class="flex-1 text-[10px] font-semibold uppercase tracking-wider py-1.5 rounded-md text-slate-500 hover:text-slate-300">Insights</button>
+            </div>
+
+            <!-- Tree View (Industries > Sub-industries) -->
+            <div id="tree-view" class="flex-1 overflow-y-auto p-3 space-y-0.5">
+                <!-- generated -->
+            </div>
+
+            <!-- List View (flat sorted list) -->
+            <div id="list-view" class="flex-1 overflow-y-auto hidden">
+                <!-- generated -->
+            </div>
+
+            <!-- Insights View -->
+            <div id="insights-view" class="flex-1 overflow-y-auto hidden p-3 space-y-4">
+                <!-- generated by buildInsights() -->
+            </div>
+
+            <!-- Export bar -->
+            <div class="export-bar px-3 py-2 flex items-center gap-1.5">
+                <button onclick="copyFilteredJSON()" class="copy-btn flex-1 justify-center py-1.5" title="Quick copy with current field selection">
+                    <i class="fa-regular fa-copy"></i> Copy JSON <span id="export-count" class="text-slate-600"></span>
+                </button>
+                <button onclick="openExportModal()" class="copy-btn justify-center py-1.5 px-2" title="Choose fields to export">
+                    <i class="fa-solid fa-gear"></i>
+                </button>
+                <button onclick="downloadFilteredCSV()" class="copy-btn flex-1 justify-center py-1.5">
+                    <i class="fa-solid fa-download"></i> CSV
+                </button>
+                <button onclick="copyFilteredMarkdown()" class="copy-btn justify-center py-1.5 px-2" title="Copy as Markdown table">
+                    <i class="fa-brands fa-markdown"></i>
+                </button>
+            </div>
+
+            <!-- Stats bar -->
+            <div class="px-3 py-2 border-t border-white/5 flex items-center justify-between">
+                <div class="flex items-center gap-3 text-[10px] text-slate-500">
+                    <span><span class="text-slate-300 font-semibold" id="visited-stat">0</span> visited</span>
+                    <span><span class="text-green-400 font-semibold" id="hiring-stat">0</span> hiring</span>
+                </div>
+                <button id="clear-visited" class="text-[10px] text-slate-600 hover:text-slate-300 transition-colors">Clear visited</button>
+            </div>
+        </div>
+
+        <!-- ═══ CENTER: Graph + Cards ═══ -->
+        <div class="flex-1 relative">
+
+            <!-- Top toolbar (solid bar, separated from content) -->
+            <div id="center-toolbar" class="center-toolbar pointer-events-auto">
+                <div class="flex gap-2">
+                    <div class="flex rounded-lg overflow-hidden border border-white/8 bg-white/[0.03]">
+                        <button data-view="graph" class="view-switch-btn active" title="Force graph">
+                            <i class="fa-solid fa-circle-nodes mr-1"></i>Graph
+                        </button>
+                        <button data-view="table" class="view-switch-btn" title="Sortable table">
+                            <i class="fa-solid fa-table mr-1"></i>Table
+                        </button>
+                        <button data-view="analytics" class="view-switch-btn" title="Analytics dashboard">
+                            <i class="fa-solid fa-chart-bar mr-1"></i>Analytics
+                        </button>
+                        <button data-view="cards" class="view-switch-btn" title="Card grid">
+                            <i class="fa-solid fa-grip mr-1"></i>Cards
+                        </button>
+                    </div>
+                    <button id="reset-view-btn" class="toolbar-action-btn" title="Reset view">
+                        <i class="fa-solid fa-arrows-rotate"></i>
+                    </button>
+                </div>
+                <div class="flex gap-1.5">
+                    <button id="compare-mode-btn" class="toolbar-action-btn" title="Compare companies">
+                        <i class="fa-solid fa-code-compare mr-1"></i><span class="toolbar-label">Compare</span>
+                    </button>
+                    <button id="ai-chat-btn" class="toolbar-action-btn" title="AI Co-Researcher">
+                        <i class="fa-solid fa-brain mr-1"></i><span class="toolbar-label">AI</span>
+                    </button>
+                    <button id="share-view-btn" class="toolbar-action-btn" title="Share current view">
+                        <i class="fa-solid fa-share mr-1"></i><span class="toolbar-label">Share</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Navigator: Prev / Current / Next -->
+            <div id="navigator" class="absolute bottom-5 left-1/2 -translate-x-1/2 nav-bar glass rounded-xl px-2 py-1.5 flex items-center gap-1 opacity-0 transition-opacity duration-300 z-20">
+                <button id="nav-prev" class="nav-btn rounded-lg px-3 py-1.5 text-slate-400 hover:text-white" title="Previous (←)">
+                    <i class="fa-solid fa-chevron-left text-xs"></i>
+                </button>
+                <div class="px-3 py-1 text-center min-w-[200px]">
+                    <p id="nav-name" class="text-sm font-semibold text-white truncate"></p>
+                    <p id="nav-pos" class="text-[10px] text-slate-500"></p>
+                </div>
+                <button id="nav-next" class="nav-btn rounded-lg px-3 py-1.5 text-slate-400 hover:text-white" title="Next (→)">
+                    <i class="fa-solid fa-chevron-right text-xs"></i>
+                </button>
+                <div class="border-l border-white/10 ml-1 pl-2 flex items-center gap-1">
+                    <button id="nav-star" class="nav-btn rounded-lg px-2 py-1.5 text-slate-500 hover:text-yellow-400" title="Star (S)">
+                        <i class="fa-regular fa-star text-xs"></i>
+                    </button>
+                    <button id="nav-expand" class="nav-btn rounded-lg px-2 py-1.5 text-slate-400 hover:text-white" title="Expand (E)">
+                        <i class="fa-solid fa-expand text-xs"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Mini Card (compact summary) -->
+            <div id="mini-card" class="absolute top-14 right-4 mini-card glass rounded-xl p-4 opacity-0 translate-y-2 hidden z-20">
+                <div class="flex items-start gap-3">
+                    <img id="mc-logo" src="" class="w-10 h-10 rounded-lg bg-slate-800 object-contain flex-shrink-0">
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 mb-0.5">
+                            <h3 id="mc-name" class="text-sm font-bold truncate"></h3>
+                            <span id="mc-hiring" class="hiring-dot w-2 h-2 rounded-full flex-shrink-0 hidden"></span>
+                        </div>
+                        <p id="mc-oneliner" class="text-xs text-slate-400 leading-relaxed line-clamp-2"></p>
+                        <div class="flex items-center gap-2 mt-2">
+                            <span id="mc-industry" class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400 uppercase tracking-wider"></span>
+                            <span id="mc-location" class="text-[10px] text-slate-500 truncate"></span>
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-1 flex-shrink-0">
+                        <button id="mc-star" class="text-slate-600 hover:text-yellow-400 transition-colors p-1" title="Star (S)">
+                            <i class="fa-regular fa-star text-sm"></i>
+                        </button>
+                        <button id="mc-expand" class="text-slate-600 hover:text-blue-400 transition-colors p-1" title="Expand (E)">
+                            <i class="fa-solid fa-chevron-down text-[10px]"></i>
+                        </button>
+                        <button id="mc-similar" class="text-slate-600 hover:text-purple-400 transition-colors p-1" title="Find similar">
+                            <i class="fa-solid fa-code-branch text-[10px]"></i>
+                        </button>
+                        <button id="mc-close" class="text-slate-600 hover:text-white transition-colors p-1">
+                            <i class="fa-solid fa-xmark text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Expanded Card -->
+            <div id="expanded-card" class="absolute top-14 right-4 expanded-card glass rounded-xl overflow-hidden opacity-0 translate-y-2 hidden z-20">
+                <div class="p-4 border-b border-white/5">
+                    <div class="flex items-start gap-3">
+                        <img id="ec-logo" src="" class="w-12 h-12 rounded-xl bg-slate-800 object-contain">
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2">
+                                <h2 id="ec-name" class="text-lg font-bold truncate"></h2>
+                                <span id="ec-hiring" class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 hidden">Hiring</span>
+                            </div>
+                            <p id="ec-oneliner" class="text-sm text-slate-300 mt-0.5 leading-relaxed"></p>
+                        </div>
+                        <div class="flex items-center gap-1 flex-shrink-0">
+                            <button id="ec-star" class="text-slate-500 hover:text-yellow-400 p-1.5 transition-colors">
+                                <i class="fa-regular fa-star"></i>
+                            </button>
+                            <button id="ec-collapse" class="text-slate-500 hover:text-blue-400 p-1.5 transition-colors" title="Collapse">
+                                <i class="fa-solid fa-chevron-up text-xs"></i>
+                            </button>
+                            <button id="ec-close" class="text-slate-500 hover:text-white p-1.5 transition-colors">
+                                <i class="fa-solid fa-xmark text-sm"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-4 space-y-4 max-h-[55vh] overflow-y-auto">
+                    <div id="ec-long-desc-wrap">
+                        <p class="text-[9px] uppercase font-bold text-slate-500 tracking-widest mb-1">About</p>
+                        <p id="ec-long-desc" class="text-xs text-slate-400 leading-relaxed whitespace-pre-line"></p>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="bg-slate-900/40 rounded-lg p-2.5">
+                            <p class="text-[9px] uppercase text-slate-500 mb-0.5">Location</p>
+                            <p id="ec-location" class="text-xs text-slate-200"></p>
+                        </div>
+                        <div class="bg-slate-900/40 rounded-lg p-2.5">
+                            <p class="text-[9px] uppercase text-slate-500 mb-0.5">Team</p>
+                            <p id="ec-team" class="text-xs text-slate-200"></p>
+                        </div>
+                        <div class="bg-slate-900/40 rounded-lg p-2.5">
+                            <p class="text-[9px] uppercase text-slate-500 mb-0.5">Stage</p>
+                            <p id="ec-stage" class="text-xs text-slate-200"></p>
+                        </div>
+                        <div class="bg-slate-900/40 rounded-lg p-2.5">
+                            <p class="text-[9px] uppercase text-slate-500 mb-0.5">Status</p>
+                            <p id="ec-status" class="text-xs text-slate-200"></p>
+                        </div>
+                    </div>
+                    <div id="ec-tags-wrap">
+                        <p class="text-[9px] uppercase font-bold text-slate-500 tracking-widest mb-1.5">Tags</p>
+                        <div id="ec-tags" class="flex flex-wrap gap-1"></div>
+                    </div>
+                    <div id="ec-industries-wrap">
+                        <p class="text-[9px] uppercase font-bold text-slate-500 tracking-widest mb-1.5">Sub-industries</p>
+                        <div id="ec-industries" class="flex flex-wrap gap-1"></div>
+                    </div>
+                    <div>
+                        <p class="text-[9px] uppercase font-bold text-slate-500 tracking-widest mb-1.5">My notes</p>
+                        <textarea id="ec-notes" rows="3" placeholder="Add research notes..." class="w-full bg-slate-900/50 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-200 placeholder:text-slate-500 resize-none focus:ring-1 focus:ring-blue-500/40 outline-none"></textarea>
+                    </div>
+                </div>
+                <div class="p-3 border-t border-white/5 flex gap-2">
+                    <a id="ec-website" href="#" target="_blank" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-center text-xs font-semibold py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i> Website
+                    </a>
+                    <a id="ec-yc-link" href="#" target="_blank" class="px-3 bg-orange-500/15 text-orange-400 rounded-lg hover:bg-orange-500/25 transition-colors flex items-center justify-center">
+                        <i class="fa-brands fa-y-combinator text-sm"></i>
+                    </a>
+                    <button id="ec-similar" class="px-3 bg-slate-800 text-slate-400 rounded-lg hover:bg-purple-500/20 hover:text-purple-400 transition-colors flex items-center justify-center" title="Find similar companies">
+                        <i class="fa-solid fa-code-branch text-sm"></i>
+                    </button>
+                    <button id="ec-copy-json" class="px-3 bg-slate-800 text-slate-400 rounded-lg hover:bg-slate-700 hover:text-white transition-colors flex items-center justify-center" title="Copy company JSON">
+                        <i class="fa-regular fa-copy text-sm"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Keyboard shortcuts overlay -->
+            <div class="absolute bottom-5 right-4 pointer-events-auto z-10">
+                <button id="shortcuts-toggle" class="glass rounded-lg px-2.5 py-1.5 text-[10px] text-slate-500 hover:text-slate-300 transition-colors">
+                    <i class="fa-regular fa-keyboard mr-1"></i>Keys
+                </button>
+                <div id="shortcuts-panel" class="absolute bottom-full right-0 mb-2 glass rounded-lg p-3 w-56 hidden">
+                    <p class="text-[9px] uppercase font-bold text-slate-500 tracking-widest mb-2">Keyboard Shortcuts</p>
+                    <div class="space-y-1.5 text-xs text-slate-400">
+                        <div class="flex justify-between"><span>Next company</span><kbd>&rarr;</kbd> or <kbd>J</kbd></div>
+                        <div class="flex justify-between"><span>Prev company</span><kbd>&larr;</kbd> or <kbd>K</kbd></div>
+                        <div class="flex justify-between"><span>Star / unstar</span><kbd>S</kbd></div>
+                        <div class="flex justify-between"><span>Expand / collapse</span><kbd>E</kbd></div>
+                        <div class="flex justify-between"><span>Close card</span><kbd>Esc</kbd></div>
+                        <div class="flex justify-between"><span>Focus search</span><kbd>/</kbd></div>
+                        <div class="flex justify-between"><span>Graph view</span><kbd>1</kbd></div>
+                        <div class="flex justify-between"><span>Table view</span><kbd>2</kbd></div>
+                        <div class="flex justify-between"><span>Analytics view</span><kbd>3</kbd></div>
+                        <div class="flex justify-between"><span>Cards view</span><kbd>4</kbd></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar expand handle (visible when collapsed) -->
+    <button id="sidebar-expand-btn" class="pointer-events-auto" title="Expand sidebar">
+        <i class="fa-solid fa-angles-right text-[10px]"></i>
+    </button>
+
+    <!-- Toast notification -->
+    <div id="toast" class="toast"><i class="fa-solid fa-check mr-1.5"></i><span id="toast-msg">Copied!</span></div>
+
+    <!-- Export Settings Modal -->
+    <div id="export-modal" class="export-modal-overlay" onclick="if(event.target===this) closeExportModal()">
+        <div class="export-modal" onclick="event.stopPropagation()">
+            <div class="export-modal-header">
+                <h3 class="text-base font-bold text-white">Export settings</h3>
+                <button type="button" onclick="closeExportModal()" class="text-slate-500 hover:text-white p-1"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="export-modal-body">
+                <div class="flex gap-2 mb-3">
+                    <button type="button" onclick="exportModalSelectAll(true)" class="copy-btn py-1.5 px-3 text-xs">Select all</button>
+                    <button type="button" onclick="exportModalSelectAll(false)" class="copy-btn py-1.5 px-3 text-xs">Deselect all</button>
+                </div>
+                <div id="export-field-groups"></div>
+                <p class="text-[10px] text-slate-500 mt-3 mb-1">Preview (1 company)</p>
+                <pre id="export-preview" class="export-preview"></pre>
+            </div>
+            <div class="export-modal-footer">
+                <button type="button" onclick="exportModalCopyJSON()" class="copy-btn flex-1 justify-center py-2"><i class="fa-regular fa-copy"></i> Copy JSON</button>
+                <button type="button" onclick="exportModalDownloadCSV()" class="copy-btn flex-1 justify-center py-2"><i class="fa-solid fa-download"></i> CSV</button>
+                <button type="button" onclick="exportModalCopyMarkdown()" class="copy-btn flex-1 justify-center py-2"><i class="fa-brands fa-markdown"></i> Markdown</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Compare tray -->
+    <div id="compare-tray" class="compare-tray">
+        <span class="text-xs text-slate-500">Compare (click nodes to add, max 3):</span>
+        <div id="compare-tray-items"></div>
+        <button id="compare-open-btn" class="copy-btn py-2 px-4" onclick="showComparison()" disabled>Compare</button>
+        <button class="copy-btn py-2 px-3" onclick="toggleCompareMode()"><i class="fa-solid fa-xmark"></i> Cancel</button>
+    </div>
+
+    <!-- Compare overlay -->
+    <div id="compare-overlay" class="compare-overlay" onclick="if(event.target===this) closeCompareOverlay()">
+        <div class="compare-table-wrap" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between p-4 border-b border-white/5">
+                <h3 class="text-base font-bold text-white">Side-by-side comparison</h3>
+                <button type="button" onclick="closeCompareOverlay()" class="text-slate-500 hover:text-white p-1"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="compare-table-container" class="p-4"></div>
+        </div>
+    </div>
+
+    <!-- Find Similar panel -->
+    <div id="similar-panel" class="similar-panel">
+        <div class="similar-panel-header">
+            <h3 class="text-sm font-bold text-white similar-panel-title">
+                <i class="fa-solid fa-link text-blue-400 mr-2"></i>Similar Companies
+            </h3>
+            <button type="button" onclick="closeSimilarPanel()" class="text-slate-500 hover:text-white p-1"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div id="similar-panel-body" class="similar-panel-body"></div>
+    </div>
+
+    <!-- AI Chat panel -->
+    <div id="ai-chat-panel" class="ai-chat-panel">
+        <div class="ai-chat-header">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-brain text-blue-400 text-xs"></i>
+                <h3 class="text-sm font-bold text-white">AI Co-Researcher</h3>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="ai-chat-settings" class="text-slate-500 hover:text-white p-1" title="Settings">
+                    <i class="fa-solid fa-gear"></i>
+                </button>
+                <button id="ai-chat-close" class="text-slate-500 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Mode tabs: Prompts | Chat -->
+        <div class="px-3 pt-2 pb-1 flex gap-1 border-b border-white/5">
+            <button id="ai-tab-prompts" class="ai-tab-btn ai-tab-active" onclick="switchAITab('prompts')">
+                <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Prompts
+            </button>
+            <button id="ai-tab-chat" class="ai-tab-btn" onclick="switchAITab('chat')">
+                <i class="fa-solid fa-comments mr-1"></i>Chat
+            </button>
+        </div>
+
+        <!-- Prompts tab (always available, no API key needed) -->
+        <div id="ai-prompts-view" class="flex-1 overflow-y-auto p-4 space-y-3">
+            <div class="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3">
+                <p class="text-xs text-slate-300 leading-relaxed mb-2">Copy a prompt with full batch context, then paste into <strong class="text-white">ChatGPT</strong>, <strong class="text-white">Claude</strong>, <strong class="text-white">Gemini</strong>, or any AI.</p>
+                <button id="copy-batch-context" class="copy-btn w-full justify-center py-2 text-xs bg-blue-600/20 border-blue-500/30 text-blue-300 hover:bg-blue-600/30">
+                    <i class="fa-regular fa-copy mr-1"></i> Copy batch context for AI <span id="context-token-est" class="text-blue-500/60 ml-1"></span>
+                </button>
+            </div>
+
+            <p class="text-[9px] uppercase font-bold text-slate-500 tracking-widest">One-click research prompts</p>
+
+            <div id="prompt-card-find-gap" class="prompt-card">
+                <div class="prompt-card-header">
+                    <div>
+                        <p class="text-xs font-semibold text-white">Find the gap</p>
+                        <p class="text-[10px] text-slate-500">What startup ideas are missing from this batch?</p>
+                    </div>
+                    <div class="prompt-card-actions">
+                        <button class="prompt-copy-btn" title="Copy full prompt for ChatGPT/Claude"><i class="fa-regular fa-copy"></i></button>
+                        <button class="prompt-use-btn" title="Use in chat"><i class="fa-solid fa-paper-plane"></i></button>
+                    </div>
+                </div>
+            </div>
+            <div id="prompt-card-roast-idea" class="prompt-card">
+                <div class="prompt-card-header">
+                    <div>
+                        <p class="text-xs font-semibold text-white">Roast my idea</p>
+                        <p class="text-[10px] text-slate-500">Compare your concept against 1000 companies</p>
+                    </div>
+                    <div class="prompt-card-actions">
+                        <button class="prompt-copy-btn" title="Copy full prompt for ChatGPT/Claude"><i class="fa-regular fa-copy"></i></button>
+                        <button class="prompt-use-btn" title="Use in chat"><i class="fa-solid fa-paper-plane"></i></button>
+                    </div>
+                </div>
+            </div>
+            <div id="prompt-card-build-thesis" class="prompt-card">
+                <div class="prompt-card-header">
+                    <div>
+                        <p class="text-xs font-semibold text-white">Build a thesis</p>
+                        <p class="text-[10px] text-slate-500">Strongest themes and contrarian bets</p>
+                    </div>
+                    <div class="prompt-card-actions">
+                        <button class="prompt-copy-btn" title="Copy full prompt for ChatGPT/Claude"><i class="fa-regular fa-copy"></i></button>
+                        <button class="prompt-use-btn" title="Use in chat"><i class="fa-solid fa-paper-plane"></i></button>
+                    </div>
+                </div>
+            </div>
+            <div id="prompt-card-who-to-talk" class="prompt-card">
+                <div class="prompt-card-header">
+                    <div>
+                        <p class="text-xs font-semibold text-white">Who should I talk to?</p>
+                        <p class="text-[10px] text-slate-500">Find relevant companies for your project</p>
+                    </div>
+                    <div class="prompt-card-actions">
+                        <button class="prompt-copy-btn" title="Copy full prompt for ChatGPT/Claude"><i class="fa-regular fa-copy"></i></button>
+                        <button class="prompt-use-btn" title="Use in chat"><i class="fa-solid fa-paper-plane"></i></button>
+                    </div>
+                </div>
+            </div>
+            <div id="prompt-card-whats-missing" class="prompt-card">
+                <div class="prompt-card-header">
+                    <div>
+                        <p class="text-xs font-semibold text-white">What's missing near this?</p>
+                        <p class="text-[10px] text-slate-500" id="prompt-missing-context">Gap analysis around selected company</p>
+                    </div>
+                    <div class="prompt-card-actions">
+                        <button class="prompt-copy-btn" title="Copy full prompt for ChatGPT/Claude"><i class="fa-regular fa-copy"></i></button>
+                        <button class="prompt-use-btn" title="Use in chat"><i class="fa-solid fa-paper-plane"></i></button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rounded-lg border border-white/5 bg-slate-900/30 p-3 mt-2">
+                <p class="text-[9px] uppercase font-bold text-slate-500 tracking-widest mb-2">Custom prompt</p>
+                <textarea id="custom-prompt-input" rows="3" placeholder="Write your own question about the batch..." class="w-full bg-slate-900/50 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-200 placeholder:text-slate-500 resize-none focus:ring-1 focus:ring-blue-500/40 outline-none mb-2"></textarea>
+                <div class="flex gap-2">
+                    <button id="custom-prompt-copy" class="copy-btn flex-1 justify-center py-1.5 text-xs">
+                        <i class="fa-regular fa-copy mr-1"></i> Copy with context
+                    </button>
+                    <button id="custom-prompt-send" class="copy-btn flex-1 justify-center py-1.5 text-xs">
+                        <i class="fa-solid fa-paper-plane mr-1"></i> Send in chat
+                    </button>
+                </div>
+            </div>
+
+            <div class="rounded-lg border border-purple-500/20 bg-purple-500/5 p-3 mt-2">
+                <p class="text-[9px] uppercase font-bold text-purple-400/70 tracking-widest mb-1">Copy filtered data + prompt</p>
+                <p class="text-[10px] text-slate-500 mb-2">Uses your export field selection. Copies <span id="prompt-export-count" class="text-slate-300">0</span> filtered companies + your prompt as one block.</p>
+                <button id="copy-data-plus-prompt" class="copy-btn w-full justify-center py-2 text-xs bg-purple-600/20 border-purple-500/30 text-purple-300 hover:bg-purple-600/30">
+                    <i class="fa-solid fa-database mr-1"></i> Copy selected data + prompt for AI
+                </button>
+            </div>
+        </div>
+
+        <!-- Chat tab (API key needed for sending) -->
+        <div id="ai-chat-view" class="flex-1 flex flex-col hidden">
+            <div id="ai-chat-body" class="ai-chat-body"></div>
+            <div id="ai-chat-no-key" class="hidden px-4 py-2 text-center">
+                <p class="text-[10px] text-slate-500">Add your API key in <button onclick="openSettingsDrawer()" class="text-blue-400 hover:underline">settings</button> to chat here, or use the Prompts tab to copy for external AI.</p>
+            </div>
+            <div class="ai-chat-input-area">
+                <input type="text" id="ai-chat-input" class="ai-chat-input" placeholder="Ask about gaps, patterns, opportunities...">
+                <button id="ai-chat-send" class="copy-btn px-4 py-2">
+                    <i class="fa-solid fa-paper-plane"></i>
+                </button>
+                <button id="ai-chat-clear" class="copy-btn px-3 py-2" title="Clear chat">
+                    <i class="fa-solid fa-trash"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings drawer -->
+    <div id="settings-drawer" class="settings-drawer">
+        <div class="settings-drawer-content" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold text-white">AI Settings</h3>
+                <button onclick="closeSettingsDrawer()" class="text-slate-500 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-2">Provider</label>
+                    <select id="ai-provider-select" class="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200">
+                        <option value="openai">OpenAI (GPT-4o-mini)</option>
+                        <option value="gemini">Google Gemini (gemini-2.0-flash-lite)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-2">API Key</label>
+                    <input type="password" id="ai-api-key-input" class="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200" placeholder="Enter your API key">
+                    <p class="text-xs text-slate-500 mt-1">Your key stays in your browser (localStorage)</p>
+                </div>
+                <div class="flex gap-2">
+                    <button id="settings-test" class="copy-btn flex-1 justify-center py-2">Test Connection</button>
+                    <button id="settings-save" class="copy-btn flex-1 justify-center py-2 bg-blue-600 hover:bg-blue-500 text-white">Save</button>
+                    <button id="settings-cancel" class="copy-btn flex-1 justify-center py-2">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="graph-container"></div>
+    
+    <!-- Alternative views (hidden by default) -->
+    <div id="table-view-container" class="alt-view-container hidden">
+        <div class="alt-view-inner">
+            <table id="data-table" class="data-table">
+                <thead id="data-table-head"></thead>
+                <tbody id="data-table-body"></tbody>
+            </table>
+        </div>
+        <div id="table-pagination" class="table-pagination"></div>
+    </div>
+    <div id="analytics-view-container" class="alt-view-container hidden">
+        <div class="analytics-toolbar">
+            <div class="flex items-center gap-3">
+                <h2 class="text-base font-bold text-white">Analytics Dashboard</h2>
+            </div>
+        </div>
+        <div class="analytics-grid p-4">
+            <!-- Charts will be rendered here -->
+        </div>
+    </div>
+    <div id="cards-view-container" class="alt-view-container hidden">
+        <div id="cards-grid" class="cards-grid">
+            <div id="cards-sentinel" class="cards-sentinel"></div>
+        </div>
+    </div>
+
+    <!-- Scripts (load order matters!) -->
+    <script src="js/state.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/similarity.js"></script>
+    <script src="js/filters.js"></script>
+    <script src="js/graph.js"></script>
+    <script src="js/sidebar.js"></script>
+    <script src="js/cards.js"></script>
+    <script src="js/similar.js"></script>
+    <script src="js/compare.js"></script>
+    <script src="js/insights.js"></script>
+    <script src="js/export.js"></script>
+    <script src="js/ai-chat.js"></script>
+    <script src="js/analytics-engine.js"></script>
+    <script src="js/analytics-charts.js"></script>
+    <script src="js/views.js"></script>
+    <script src="js/sharing.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
