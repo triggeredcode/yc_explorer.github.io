@@ -23,7 +23,7 @@ Interactive exploration tool for the Y Combinator Winter 2026 batch — 1000+ st
 ## Getting Started
 
 ```
-git clone https://github.com/triggeredcode/yc_explorer.git
+git clone https://github.com/triggeredcode/yc_explorer.github.io.git
 cd yc-explorer
 open index.html
 ```
@@ -82,7 +82,7 @@ yc-explorer/
 
 1. Push to GitHub
 2. Settings → Pages → Source: main branch, root directory
-3. Live at `https://triggeredcode.github.io/yc_explorer/`
+3. Live at `https://triggeredcode.github.io/yc_explorer.github.io/`
 
 ### Other Hosting
 
